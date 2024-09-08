@@ -106,11 +106,15 @@ async function getRoute(start, end) {
 }
 
 function calculateMatchPercentage(points1, points2) {
-  const matchingPoints = points2.filter(point2 =>
-    points1.some(point1 => haversineDistance(point1, point2) <= 15)
-  );
-  return (matchingPoints.length / points2.length) * 100;
+  // Count the number of points in points1 that have at least one corresponding point in points2 within the distance threshold
+  const matchingPointsCount = points1.filter(point1 =>
+    points2.some(point2 => haversineDistance(point1, point2) <= 15)
+  ).length;
+
+  // Calculate the percentage based on the total number of points in points1
+  return (matchingPointsCount / points1.length) * 100;
 }
+
 
 app.listen(3000, () => {
   console.log("Server running on port 3000");
