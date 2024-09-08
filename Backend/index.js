@@ -81,13 +81,28 @@ app.post("/match-routes", async (req, res) => {
   }
 });
 
-async function getRoute(origin, destination) {
-    const sanitizedOrigin = origin.replace(/\s+/g, '');
-  const sanitizedDestination = destination.replace(/\s+/g, '');
-
-  const url = `${OSRM_API_URL}/${sanitizedOrigin};${sanitizedDestination}?geometries=geojson`;
-  const response = await axios.get(url);
-  return response.data.routes[0].geometry.coordinates;
+async function getRoute(start, end) {
+  try {
+    const url = `http://router.project-osrm.org/route/v1/driving/${start.replace(/\s+/g, '')};${end.replace(/\s+/g, '')}?geometries=geojson`;
+    console.log('Request URL:', url);  // Add this log to check the constructed URL
+    
+    const response = await axios.get(url, {
+      timeout: 10000,
+      family: 4,
+    });
+    return response.data.routes[0].geometry.coordinates;
+  } catch (error) {
+    if (error.response) {
+      console.error('Error response data:', error.response.data);
+      console.error('Error response status:', error.response.status);
+      console.error('Error response headers:', error.response.headers);
+    } else if (error.request) {
+      console.error('No response received:', error.request);
+    } else {
+      console.error('Request error:', error.message);
+    }
+    throw new Error('Failed to fetch route from OSRM API');
+  }
 }
 
 function calculateMatchPercentage(points1, points2) {
