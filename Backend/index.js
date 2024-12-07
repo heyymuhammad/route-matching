@@ -63,51 +63,44 @@ function haversineDistance(coord1, coord2) {
   return R * c;
 }
 
+function calculateOverlapPercentage(driverPoints, passengerPoints) {
+  const overlappingPointsCount = passengerPoints.filter(passengerPoint =>
+    driverPoints.some(driverPoint => haversineDistance(passengerPoint, driverPoint) <= 100) // 100 meters threshold
+  ).length;
+
+  // Calculate the percentage based on the total number of points in the passenger route
+  return (overlappingPointsCount / passengerPoints.length) * 100;
+}
+
 app.post("/match-routes", async (req, res) => {
   let { origin1, destination1, origin2, destination2 } = req.body;
 
   try {
-    // Swap the coordinates if they are in the wrong order
-    console.log('Origin 1:', origin1);
-    console.log('Destination 1:', destination1);
-    console.log('Origin 2:', origin2);
-    console.log('Destination 2:', destination2);
+    // Fetch routes for both driver and passenger
+    const route1 = await getRoute(origin1, destination1); // Driver's route
+    const route2 = await getRoute(origin2, destination2); // Passenger's route
 
-    origin1 = origin1.split(",").reverse().join(",");  // Swap origin1 lat/lon
-    destination1 = destination1.split(",").reverse().join(",");  // Swap destination1 lat/lon
-    origin2 = origin2.split(",").reverse().join(",");  // Swap origin2 lat/lon
-    destination2 = destination2.split(",").reverse().join(",");  // Swap destination2 lat/lon
+    // Generate points for both routes
+    const points1 = generatePoints(route1, 50); // Driver's points
+    const points2 = generatePoints(route2, 50); // Passenger's points
 
+    // Calculate overlap percentage
+    const overlapPercentage = calculateOverlapPercentage(points1, points2);
 
-    // Now fetch routes with swapped coordinates
-    const route1 = await getRoute(origin1, destination1);
-    const route2 = await getRoute(origin2, destination2);
+    console.log(`Calculated overlap percentage: ${overlapPercentage}%`);
 
-    console.log('Route 1:', route1);
-    console.log('Route 2:', route2);
-
-    const points1 = generatePoints(route1, 50); // Generate points every 50 meters
-    const points2 = generatePoints(route2, 50);
-
-    console.log('Points 1:', points1);
-    console.log('Points 2:', points2);
-
-    const matchPercentage = calculateMatchPercentage(points1, points2);
-
-    console.log(`Calculated match percentage: ${matchPercentage}%`);
-
-    let IsSuitable = matchPercentage >= 70;
-    if (IsSuitable) {
+    let isSuitable = overlapPercentage >= 70; // Define your threshold
+    if (isSuitable) {
       console.log("Both Parties Suitable for Carpooling towards destination~!");
     }
 
     res.json({
-      matchPercentage,
+      overlapPercentage,
       route1,
       route2,
       points1,
       points2,
-      IsSuitable
+      isSuitable
     });
   } catch (error) {
     console.error(error);
@@ -118,15 +111,32 @@ app.post("/match-routes", async (req, res) => {
 
 async function getRoute(start, end) {
   try {
-    const url = `http://router.project-osrm.org/route/v1/driving/${start.replace(/\s+/g, '')};${end.replace(/\s+/g, '')}?geometries=geojson`;
-    console.log('Request URL:', url);  // Add this log to check the constructed URL
+    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${start.trim()}&destination=${end.trim()}&key=AIzaSyBKMjlIRA_lO4xejmcdaRKa5sLtSEA1tRE`;
+    console.log('Request URL:', url);  // Log the constructed URL
     
     const response = await axios.get(url, {
       timeout: 10000,
       family: 4,
     });
-    return response.data.routes[0].geometry.coordinates;
+
+    // Log the full response for debugging
+    console.log('API Response:', response.data);
+
+    // Check if the response contains routes
+    if (!response.data.routes || response.data.routes.length === 0) {
+      console.error('No routes found in the response:', response.data);
+      throw new Error('No routes found for the given origin and destination');
+    }
+
+    // Access the coordinates from the legs of the first route
+    const coordinates = response.data.routes[0].legs[0].steps.map(step => step.polyline.points);
+    
+    // Flatten the array of coordinates if needed
+    const flattenedCoordinates = coordinates.flatMap(point => decodePolyline(point));
+
+    return flattenedCoordinates;
   } catch (error) {
+    console.error('Error occurred in getRoute function:');
     if (error.response) {
       console.error('Error response data:', error.response.data);
       console.error('Error response status:', error.response.status);
@@ -136,20 +146,40 @@ async function getRoute(start, end) {
     } else {
       console.error('Request error:', error.message);
     }
-    throw new Error('Failed to fetch route from OSRM API');
+    throw new Error('Failed to fetch route from Google Maps API');
   }
 }
 
-function calculateMatchPercentage(points1, points2) {
-  // Count the number of points in points1 that have at least one corresponding point in points2 within the distance threshold
-  const matchingPointsCount = points1.filter(point1 =>
-    points2.some(point2 => haversineDistance(point1, point2) <= 100)
-  ).length;
+// Function to decode polyline points
+function decodePolyline(encoded) {
+  const poly = [];
+  let index = 0, len = encoded.length;
+  let lat = 0, lng = 0;
 
-  // Calculate the percentage based on the total number of points in points1
-  return (matchingPointsCount / points1.length) * 100;
+  while (index < len) {
+    let b, shift = 0, result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlat = ((result >> 1) ^ -(result & 1));
+    lat += dlat;
+
+    shift = 0;
+    result = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    const dlng = ((result >> 1) ^ -(result & 1));
+    lng += dlng;
+
+    poly.push([lat / 1E5, lng / 1E5]);
+  }
+  return poly;
 }
-
 
 app.listen(3000, () => {
   console.log("Server running on port 3000");
