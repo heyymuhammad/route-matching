@@ -59,7 +59,7 @@
         // Initialize the map
         map = new google.maps.Map(document.getElementById("map"), {
           center: { lat: 0, lng: 0 }, // Set initial center
-          zoom: 2,
+          zoom: 5, // Adjust zoom level as needed
         });
         directionsService = new google.maps.DirectionsService();
         
@@ -81,16 +81,18 @@
 
           // Call the backend API to calculate match
           try {
-            const response = await axios.post("http://localhost:3000/match-routes", {
-              origin1,
-              destination1,
-              origin2,
-              destination2
+            const response = await fetch('http://localhost:3000/match-routes', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ origin1, destination1, origin2, destination2 }),
             });
 
-            // Check if the response contains the expected properties
-            if (response.data && response.data.isSuitable !== undefined) {
-              const { isSuitable, overlapPercentage } = response.data;
+            const data = await response.json();
+
+            if (response.ok) {
+              const { overlapPercentage, isSuitable, firstOverlapPoint, lastOverlapPoint } = data;
 
               document.getElementById("result").innerHTML = `Match Percentage: ${Math.round(overlapPercentage)}%`;
               document.getElementById("resultfinal").innerHTML = isSuitable
@@ -100,6 +102,17 @@
               // Call the function to display routes on the map
               calculateAndDisplayRoute(origin1, destination1, directionsRenderer1);
               calculateAndDisplayRoute(origin2, destination2, directionsRenderer2);
+
+              // Mark the first and last overlap points on the map
+              if (firstOverlapPoint) {
+                addMarker(firstOverlapPoint, 'First Overlap Point');
+              }
+              if (lastOverlapPoint) {
+                addMarker(lastOverlapPoint, 'Last Overlap Point');
+              }
+
+              console.log("First Overlap Point:", firstOverlapPoint);
+              console.log("Last Overlap Point:", lastOverlapPoint);
 
             } else {
               console.error("Unexpected response structure:", response.data);
@@ -129,6 +142,20 @@
             }
           }
         );
+      }
+
+      // Function to add a marker on the map
+      function addMarker(location, title) {
+        console.log("Adding marker at:", location); // Debugging statement
+        const marker = new google.maps.Marker({
+          position: { lat: location[0], lng: location[1] }, // Note: lat is at index 0 and lng is at index 1
+          map: map, // Assuming 'map' is your Google Map instance
+          title: title,
+        });
+
+        // Optionally, adjust the map's center to the marker's position
+        map.setCenter(marker.getPosition());
+        map.setZoom(15); // Adjust zoom level if necessary
       }
     </script>
   </body>

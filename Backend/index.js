@@ -64,12 +64,20 @@ function haversineDistance(coord1, coord2) {
 }
 
 function calculateOverlapPercentage(driverPoints, passengerPoints) {
-  const overlappingPointsCount = passengerPoints.filter(passengerPoint =>
+  const overlappingPoints = passengerPoints.filter(passengerPoint =>
     driverPoints.some(driverPoint => haversineDistance(passengerPoint, driverPoint) <= 100) // 100 meters threshold
-  ).length;
+  );
+
+  const overlappingPointsCount = overlappingPoints.length;
+
+  // Find the first and last overlapping points
+  const firstOverlapPoint = overlappingPoints.length > 0 ? overlappingPoints[0] : null;
+  const lastOverlapPoint = overlappingPoints.length > 0 ? overlappingPoints[overlappingPoints.length - 1] : null;
 
   // Calculate the percentage based on the total number of points in the passenger route
-  return (overlappingPointsCount / passengerPoints.length) * 100;
+  const overlapPercentage = (overlappingPointsCount / passengerPoints.length) * 100;
+
+  return { overlapPercentage, firstOverlapPoint, lastOverlapPoint };
 }
 
 app.post("/match-routes", async (req, res) => {
@@ -84,8 +92,8 @@ app.post("/match-routes", async (req, res) => {
     const points1 = generatePoints(route1, 50); // Driver's points
     const points2 = generatePoints(route2, 50); // Passenger's points
 
-    // Calculate overlap percentage
-    const overlapPercentage = calculateOverlapPercentage(points1, points2);
+    // Calculate overlap percentage and points
+    const { overlapPercentage, firstOverlapPoint, lastOverlapPoint } = calculateOverlapPercentage(points1, points2);
 
     console.log(`Calculated overlap percentage: ${overlapPercentage}%`);
 
@@ -94,13 +102,11 @@ app.post("/match-routes", async (req, res) => {
       console.log("Both Parties Suitable for Carpooling towards destination~!");
     }
 
-    res.json({
+    response = res.json({
+      isSuitable,
       overlapPercentage,
-      route1,
-      route2,
-      points1,
-      points2,
-      isSuitable
+      firstOverlapPoint,
+      lastOverlapPoint,
     });
   } catch (error) {
     console.error(error);
