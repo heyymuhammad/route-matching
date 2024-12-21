@@ -21,20 +21,15 @@ function generatePoints(route, distance) {
   for (let i = 1; i < route.length; i++) {
     const end = route[i];
     let segmentDistance = haversineDistance(start, end);
-    console.log(`Segment start: ${start}`);
-    console.log(`Segment end: ${end}`);
-    console.log(`Initial segment distance: ${segmentDistance}`);
 
     while (segmentDistance >= distance) {
       const fraction = distance / segmentDistance;
       const lat = start[1] + (end[1] - start[1]) * fraction;
       const lon = start[0] + (end[0] - start[0]) * fraction;
       points.push([lon, lat]);  // Add point with longitude first
-      console.log(`Added point: [${lon}, ${lat}]`);
 
       start = [lon, lat];
       segmentDistance = haversineDistance(start, end);  // Recalculate distance
-      console.log(`Updated segment distance: ${segmentDistance}`);
     }
 
     accumulatedDistance += segmentDistance;
@@ -71,8 +66,8 @@ function calculateOverlapPercentage(driverPoints, passengerPoints) {
   const overlappingPointsCount = overlappingPoints.length;
 
   // Find the first and last overlapping points
-  const firstOverlapPoint = overlappingPoints.length > 0 ? overlappingPoints[0] : null;
-  const lastOverlapPoint = overlappingPoints.length > 0 ? overlappingPoints[overlappingPoints.length - 1] : null;
+  const firstOverlapPoint = overlappingPoints.length > 0 ? { lat: overlappingPoints[0][0], lng: overlappingPoints[0][1] } : null;
+  const lastOverlapPoint = overlappingPoints.length > 0 ? { lat: overlappingPoints[overlappingPoints.length - 1][0], lng: overlappingPoints[overlappingPoints.length - 1][1] } : null;
 
   // Calculate the percentage based on the total number of points in the passenger route
   const overlapPercentage = (overlappingPointsCount / passengerPoints.length) * 100;
