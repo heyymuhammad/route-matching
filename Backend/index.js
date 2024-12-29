@@ -58,6 +58,17 @@ function haversineDistance(coord1, coord2) {
   return R * c;
 }
 
+async function getDrivingDistance(origin, destination) {
+  const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin}&destination=${destination}&key=AIzaSyBKMjlIRA_lO4xejmcdaRKa5sLtSEA1tRE`;
+  const response = await axios.get(url);
+
+  if (response.data.status === 'OK') {
+    return response.data.routes[0].legs[0].distance.value; // Distance in meters
+  } else {
+    throw new Error(`Error fetching driving distance: ${response.data.status}`);
+  }
+}
+
 function calculateOverlapPercentage(driverPoints, passengerPoints) {
   const overlappingPoints = passengerPoints.filter(passengerPoint =>
     driverPoints.some(driverPoint => haversineDistance(passengerPoint, driverPoint) <= 100) // 100 meters threshold
@@ -72,7 +83,7 @@ function calculateOverlapPercentage(driverPoints, passengerPoints) {
   // Calculate the percentage based on the total number of points in the passenger route
   const overlapPercentage = (overlappingPointsCount / passengerPoints.length) * 100;
 
-  return { overlapPercentage, firstOverlapPoint, lastOverlapPoint };
+  return { overlapPercentage, firstOverlapPoint, lastOverlapPoint, overlappingPoints};
 }
 
 app.post("/match-routes", async (req, res) => {
@@ -88,8 +99,13 @@ app.post("/match-routes", async (req, res) => {
     const points2 = generatePoints(route2, 50); // Passenger's points
 
     // Calculate overlap percentage and points
-    const { overlapPercentage, firstOverlapPoint, lastOverlapPoint } = calculateOverlapPercentage(points1, points2);
+    const { overlapPercentage, firstOverlapPoint, lastOverlapPoint, overlappingPoints} = calculateOverlapPercentage(points1, points2);
 
+    console.log("Overlapping Points: ", overlappingPoints);
+
+    let totalOverlapDistance = await getDrivingDistance(`${overlappingPoints[0][0]},${overlappingPoints[0][1]}`, `${overlappingPoints[overlappingPoints.length - 1][0]},${overlappingPoints[overlappingPoints.length - 1][1]}`);
+
+    console.log(`Total Overlap Distance: ${totalOverlapDistance}`);
     console.log(`Calculated overlap percentage: ${overlapPercentage}%`);
 
     let isSuitable = overlapPercentage >= 70; // Define your threshold
@@ -102,6 +118,7 @@ app.post("/match-routes", async (req, res) => {
       overlapPercentage,
       firstOverlapPoint,
       lastOverlapPoint,
+      totalOverlapDistance
     });
   } catch (error) {
     console.error(error);
@@ -109,6 +126,18 @@ app.post("/match-routes", async (req, res) => {
   }
 });
 
+// New endpoint to get driving distance
+app.get("/get-driving-distance", async (req, res) => {
+  const { origin, destination } = req.body;
+
+  try {
+    const distance = await getDrivingDistance(origin, destination);
+    res.json({ distance });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 async function getRoute(start, end) {
   try {
@@ -120,9 +149,6 @@ async function getRoute(start, end) {
       family: 4,
     });
 
-    // Log the full response for debugging
-    console.log('API Response:', response.data);
-
     // Check if the response contains routes
     if (!response.data.routes || response.data.routes.length === 0) {
       console.error('No routes found in the response:', response.data);
@@ -131,7 +157,7 @@ async function getRoute(start, end) {
 
     // Access the coordinates from the legs of the first route
     const coordinates = response.data.routes[0].legs[0].steps.map(step => step.polyline.points);
-    
+    console.log('Coordinates:', response.data.routes[0].legs[0].steps);
     // Flatten the array of coordinates if needed
     const flattenedCoordinates = coordinates.flatMap(point => decodePolyline(point));
 
